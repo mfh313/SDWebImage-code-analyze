@@ -1,5 +1,4 @@
 # iOS--SDWebImage
-源码阅读总结
   SDWebImage是常用的图片异步下载框架，本人一直想找个时间好好阅读下代码，趁这个机会好好总结下。
 下载图片常用接口：
 - (void)sd_setImageWithURL:(NSURL *)url;
