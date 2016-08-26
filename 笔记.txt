@@ -59,7 +59,6 @@ id <SDWebImageOperation> operation = [SDWebImageManager.sharedManager downloadIm
 [self sd_setImageLoadOperation:operation forKey:@"UIImageViewImageLoad"];
 
 看得出来，SDWebImageManager是主要核心的类，包括 SDImageCache， SDWebImageDownloader。SDWebImageManager在init方法中初始化了这两个类。
-
 对于SDImageCache的介绍，这个是单例。主要缓存的图片在 NSCache的实例里面，此外，还创建了文件读写专用进程 ioQueue。同时设置文件保存的时间为一周 _maxCacheAge。
 收到内存警告的通知后会清空数据。
 
@@ -84,7 +83,6 @@ id <SDWebImageOperation> operation = [SDWebImageManager.sharedManager downloadIm
 
 先找到图片的磁盘空间，
 [NSURL fileURLWithPath:self.diskCachePath isDirectory:YES];
-
 然后用文件管理器找到文件的集合。
 NSArray *resourceKeys = @[NSURLIsDirectoryKey, NSURLContentModificationDateKey, NSURLTotalFileAllocatedSizeKey];
 NSDirectoryEnumerator *fileEnumerator = [_fileManager enumeratorAtURL:diskCacheURL
@@ -143,6 +141,68 @@ SDWebImageDownloaderOptions downloaderOptions = 0;
                 // ignore image read from NSURLCache if image if cached but force refreshing
                 downloaderOptions |= SDWebImageDownloaderIgnoreCachedResponse;
             }
-
 这里会生成实际的对imageDownloader有用的操作枚举。
-s
+
+最终到了最后的下载逻辑了。
+
+id <SDWebImageOperation> subOperation = [self.imageDownloader downloadImageWithURL:url options:downloaderOptions progress:progressBlock completed:^(UIImage *downloadedImage, NSData *data, NSError *error, BOOL finished)
+这里为了避免循环引用，在block内部，使用strong指针强引用了 SDWebImageCombinedOperation，这个类刚开始很绕口，你看就了就会发现还是很有巧妙的地方的。 它将下载的取消糅合在一起。
+__strong__typeof(weakOperation) strongOperation = weakOperation;
+此工程中，为了避免多线程竞争问题，多次使用了 @synchronized闭包来加锁。
+
+- (void)addProgressCallback:(SDWebImageDownloaderProgressBlock)progressBlock completedBlock:(SDWebImageDownloaderCompletedBlock)completedBlock forURL:(NSURL *)url createCallback:(SDWebImageNoParamsBlock)createCallback;
+此方法的作用是判断下载过程是否在进行，否则执行 createCallback来发起下载请求。
+NSMutableDictionary *URLCallbacks中存储的block请求。
+
+dispatch_barrier_sync(self.barrierQueue, ^{
+        BOOL first = NO;
+        if (!self.URLCallbacks[url]) {
+            self.URLCallbacks[url] = [NSMutableArray new];
+            first = YES;
+        }
+
+        // Handle single download of simultaneous download request for the same URL
+        NSMutableArray *callbacksForURL = self.URLCallbacks[url];
+        NSMutableDictionary *callbacks = [NSMutableDictionary new];
+        if (progressBlock) callbacks[kProgressCallbackKey] = [progressBlock copy];
+        if (completedBlock) callbacks[kCompletedCallbackKey] = [completedBlock copy];
+        [callbacksForURL addObject:callbacks];
+        self.URLCallbacks[url] = callbacksForURL;
+
+        if (first) {
+            createCallback();
+        }
+    });
+
+这里我们梳理下这个self.URLCallbacks结构，首先是字典。调用self.URLCallbacks[url]获取的是操作的数组。下半部分的操作是刷新progressBlock和completedBlock。新建存储这两个的字典。NSMutableDictionary *callbacks = [NSMutableDictionary new];
+if (progressBlock) callbacks[kProgressCallbackKey] = [progressBlock copy];
+if (completedBlock) callbacks[kCompletedCallbackKey] = [completedBlock copy];
+设置好值后，然后将其数组加入这个字典，然后重新赋值。如果first是YES则进入createCallback回调内。
+
+[x] 这里不设置self.URLCallbacks[url] 为字典而是数组的原因是可以返回多个block回调。因为同时多个imageView下载时候一次请求，下载完各自返回block
+
+[x] 好处是不会发起多次下载。
+
+重磅代码在这里：
+     __block SDWebImageDownloaderOperation *operation;
+  __weak __typeof(self)wself = self;
+
+NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url cachePolicy:(options & SDWebImageDownloaderUseNSURLCache ? NSURLRequestUseProtocolCachePolicy : NSURLRequestReloadIgnoringLocalCacheData) timeoutInterval:timeoutInterval];
+
+operation = [[wself.operationClass alloc] initWithRequest:request
+                                                        inSession:self.session
+                                                          options:options
+                                                         progress:
+                                                         completed:
+                                                         cancelled:
+最后将继承 NSOperation的SDWebImageDownloaderOperation加入到 SDWebImageDownloader的 downloadQueue中，这样就会执行下载过程了。
+
+if (wself.executionOrder == SDWebImageDownloaderLIFOExecutionOrder) {
+            // Emulate LIFO execution order by systematically adding new operations as last operation's dependency
+            [wself.lastAddedOperation addDependency:operation];
+            wself.lastAddedOperation = operation;
+}
+
+这里有趣的地方是利用NSOperation的优先级，可以实现后进先出或者先进先出。
+
+对 SDWebImageDownloaderOperation的总结
