@@ -16,15 +16,16 @@ typedef void(^SDWebImageDownloaderCompletedBlock)(UIImage *image, NSData *data, 
 
 block都无返回值。再看看options的定义
 
-typedef NS_OPTIONS(NSUInteger, SDWebImageDownloaderOptions) {
-    SDWebImageDownloaderLowPriority = 1 << 0,
-    SDWebImageDownloaderProgressiveDownload = 1 << 1,
-    SDWebImageDownloaderUseNSURLCache = 1 << 2,
-    SDWebImageDownloaderIgnoreCachedResponse = 1 << 3,
-    SDWebImageDownloaderContinueInBackground = 1 << 4,
-    SDWebImageDownloaderHandleCookies = 1 << 5,
-    SDWebImageDownloaderAllowInvalidSSLCertificates = 1 << 6,
-    SDWebImageDownloaderHighPriority = 1 << 7,
+typedef NS_OPTIONS(NSUInteger, SDWebImageDownloaderOptions) 
+{
+  SDWebImageDownloaderLowPriority = 1 << 0,
+  SDWebImageDownloaderProgressiveDownload = 1 << 1,
+  SDWebImageDownloaderUseNSURLCache = 1 << 2,
+  SDWebImageDownloaderIgnoreCachedResponse = 1 << 3,
+  SDWebImageDownloaderContinueInBackground = 1 << 4,
+  SDWebImageDownloaderHandleCookies = 1 << 5,
+  SDWebImageDownloaderAllowInvalidSSLCertificates = 1 << 6,
+  SDWebImageDownloaderHighPriority = 1 << 7,
 };
 
 一般我们的定义都是从0开始增加的。而这里用的左移的操作定义数值，不知道这样有啥好处。后面研究下。
