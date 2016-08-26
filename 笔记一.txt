@@ -78,7 +78,6 @@ id <SDWebImageOperation> operation = [SDWebImageManager.sharedManager downloadIm
 }
 
 其中删除过期文件的方法，
-
 - (void)cleanDiskWithCompletionBlock:(SDWebImageNoParamsBlock)completionBlock。
 
 先找到图片的磁盘空间，
@@ -202,7 +201,6 @@ if (wself.executionOrder == SDWebImageDownloaderLIFOExecutionOrder) {
             [wself.lastAddedOperation addDependency:operation];
             wself.lastAddedOperation = operation;
 }
-
 这里有趣的地方是利用NSOperation的优先级，可以实现后进先出或者先进先出。
 
 对 SDWebImageDownloaderOperation的总结
