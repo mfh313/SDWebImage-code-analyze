@@ -145,3 +145,4 @@ SDWebImageDownloaderOptions downloaderOptions = 0;
             }
 
 这里会生成实际的对imageDownloader有用的操作枚举。
+s
